@@ -3,7 +3,7 @@ from django.http import JsonResponse
 import random
 import time
 from agora_token_builder import RtcTokenBuilder
-from .models import RoomMember, Detection, Etudiant
+from .models import RoomMember, Detection, Etudiant,Savemember
 import json
 from django.views.decorators.csrf import csrf_exempt
 import cv2
@@ -16,8 +16,9 @@ from django.utils import timezone
 import mysql.connector
 from datetime import datetime
 from .forms import DetectionForm
+import asyncio
+import pyvirtualcam
 #from agora import AgoraRTCClient
-
 # Se connecter à la base de données MySQL
 mydb = mysql.connector.connect(
   host="localhost",
@@ -61,7 +62,7 @@ def dashboard_s(request):
     context = {'data': data}
     return render(request, 'Student/dashboard/dashboard.html', context)
 
-def getToken(request):
+async def getToken(request):
     appId = "72bfab75cd3b4b1b87aab06996d2daed"
     appCertificate = "c64c362a21c742fbb613ba61118128e2"
     channelName = request.GET.get('channel')
@@ -72,7 +73,7 @@ def getToken(request):
     role = 1
 
     token = RtcTokenBuilder.buildTokenWithUid(appId, appCertificate, channelName, uid, role, privilegeExpiredTs)
-
+    await asyncio.sleep(0.01)
     return JsonResponse({'token': token, 'uid': uid}, safe=False)
 
 
@@ -84,6 +85,12 @@ def createMember(request):
         uid=data['UID'],
         room_name=data['room_name']
     )
+    member_data, created = Etudiant.objects.get_or_create(
+        nom=data['name'],
+    )
+ 
+    global detection
+    detection=True
 
     return JsonResponse({'name':data['name']}, safe=False)
 
@@ -97,8 +104,9 @@ def getMember(request):
         room_name=room_name,
     )
     name = member.name
-    return JsonResponse({'name':member.name}, safe=False)
 
+    return JsonResponse({'name':member.name}, safe=False)
+detection=True
 @csrf_exempt
 def deleteMember(request):
     data = json.loads(request.body)
@@ -108,6 +116,8 @@ def deleteMember(request):
         room_name=data['room_name']
     )
     member.delete()
+    global detection
+    detection=False
     return JsonResponse('Member deleted', safe=False)
 
 def student(request):
@@ -120,12 +130,18 @@ emotion_labels = ['Angry','Disgust','Fear','Happy','Neutral', 'Sad', 'Surprise']
 
 # Create a cascade classifier for detecting faces
 face_classifier = cv2.CascadeClassifier(r'C:\Users\aya\Desktop\Emotion_Detection\haarcascade_frontalface_default.xml')
-
+width=640
+height=480
 
 # Function to generate frames from the video stream
-def gen_frames():
-    cap = cv2.VideoCapture(0)
-    while True:
+def emotion_detection(request):
+   member_data = Etudiant.objects.all().latest('nom')
+  
+ 
+   with pyvirtualcam.Camera(width, height, 20) as cam:
+
+     cap = cv2.VideoCapture(0)
+     while detection:
         success, frame = cap.read()
         if not success:
             break
@@ -134,7 +150,7 @@ def gen_frames():
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = face_classifier.detectMultiScale(gray)
             for (x, y, w, h) in faces:
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 255), 2)
+
                 roi_gray = gray[y:y + h, x:x + w]
                 roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
                 if np.sum([roi_gray]) != 0:
@@ -144,8 +160,15 @@ def gen_frames():
                     prediction = classifier.predict(roi)[0]
                     label = emotion_labels[prediction.argmax()]
                     label_position = (x, y)
-                    cv2.putText(frame, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                    Detection.objects.create(emotion=label, detection_time=timezone.now())
+                    
+                     # Adjust the color of the frame
+                   #frame = adjust_color(frame, brightness, contrast, saturation)
+
+                      # Get or create the student object and update their state
+                    etudiant, created = Etudiant.objects.get_or_create(nom=member_data)
+                    etudiant.save()
+                    # Save the emotion detection data for the student
+                    Detection.objects.create(etudiant=etudiant,emotion=label, detection_time=timezone.now())
                     # Sauvegarder les données de détection d'émotion dans la base de données
                     sql = "INSERT INTO detections (emotion, detection_time) VALUES (%s, %s)"
                     val = (label, datetime.now())
@@ -153,21 +176,13 @@ def gen_frames():
                     mydb.commit()
                 else:
                     cv2.putText(frame, 'No Faces', (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            ret, buffer = cv2.imencode('.jpg', frame)
-            frame = buffer.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+       
+       
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  
+        cam.send(frame)
 
-# Decorator to compress the video stream
-@gzip.gzip_page
-def emotion_detection(request):
-    try:
-        return StreamingHttpResponse(gen_frames(), content_type="multipart/x-mixed-replace;boundary=frame")
-    except Exception as e:
-        print(e)
-
-  
-
+   
+   return render(request, 'Student/base/room.html')
 
 
 

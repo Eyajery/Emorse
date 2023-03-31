@@ -9,25 +9,36 @@ class RoomMember(models.Model):
     insession = models.BooleanField(default=True)
 
     def __str__(self):
-        return self.name
-class Detection(models.Model):
-    emotion = models.CharField(max_length=255)
-    detection_time = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        verbose_name_plural = 'Detection'
-
-    def __str__(self):
-        return f'{self.emotion}, {self.detection_time}'
-    
-    
-# Create your models here.
+        return f'{self.name}, {self.uid},{self.room_name},{self.insession}'
 class Etudiant(models.Model):
     nom = models.CharField(max_length=100)
-    etat = models.IntegerField()
-    
+   
+
+
     class Meta:
         verbose_name_plural = 'etudiant'
 
     def __str__(self):
         return f'{self.nom}'
+
+
+
+class Detection(models.Model):
+    etudiant = models.ForeignKey(Etudiant, on_delete=models.CASCADE,default=None)
+    emotion = models.CharField(max_length=255)
+    detection_time = models.DateTimeField(auto_now_add=True)
+   
+    class Meta:
+        verbose_name_plural = 'Detection'
+
+    def __str__(self):
+        return f'{self.emotion}, {self.detection_time},{self.etudiant}'
+    
+    
+class Savemember(models.Model):
+    name_member = models.CharField(max_length=200)
+    class Meta:
+        verbose_name_plural = 'Savemember'
+
+    def __str__(self):
+        return f'{self.name_member}'
