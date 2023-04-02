@@ -3,7 +3,7 @@ from django.http import JsonResponse
 import random
 import time
 from agora_token_builder import RtcTokenBuilder
-from .models import RoomMember, Detection, Etudiant,Savemember
+from .models import RoomMember, Detection, Etudiant
 import json
 from django.views.decorators.csrf import csrf_exempt
 import cv2
@@ -85,10 +85,7 @@ def createMember(request):
         uid=data['UID'],
         room_name=data['room_name']
     )
-    member_data, created = Etudiant.objects.get_or_create(
-        nom=data['name'],
-    )
- 
+   
     global detection
     detection=True
 
@@ -135,9 +132,7 @@ height=480
 
 # Function to generate frames from the video stream
 def emotion_detection(request):
-   member_data = Etudiant.objects.all().latest('nom')
-  
- 
+   #member_data = Etudiant.objects.last()
    with pyvirtualcam.Camera(width, height, 20) as cam:
 
      cap = cv2.VideoCapture(0)
@@ -161,14 +156,19 @@ def emotion_detection(request):
                     label = emotion_labels[prediction.argmax()]
                     label_position = (x, y)
                     
-                     # Adjust the color of the frame
+                   # Adjust the color of the frame
                    #frame = adjust_color(frame, brightness, contrast, saturation)
 
-                      # Get or create the student object and update their state
-                    etudiant, created = Etudiant.objects.get_or_create(nom=member_data)
-                    etudiant.save()
-                    # Save the emotion detection data for the student
-                    Detection.objects.create(etudiant=etudiant,emotion=label, detection_time=timezone.now())
+                    member = RoomMember.objects.last()
+                    if member is not None:
+                            # Create or update the corresponding Etudiant object
+                            etudiant, created = Etudiant.objects.get_or_create(nom=member.name)
+                            etudiant.etat='present(e)'
+                            etudiant.save()
+
+                            # Save the emotion detection data for the student
+                            detection_data = Detection.objects.create(etudiant=etudiant, emotion=label, detection_time=timezone.now())
+                            detection_data.save()
                     # Sauvegarder les données de détection d'émotion dans la base de données
                     sql = "INSERT INTO detections (emotion, detection_time) VALUES (%s, %s)"
                     val = (label, datetime.now())
