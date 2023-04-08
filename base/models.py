@@ -33,6 +33,6 @@ class Detection(models.Model):
         verbose_name_plural = 'Detection'
 
     def __str__(self):
-        return f'{self.emotion}, {self.detection_time},{self.etudiant}'
+        return f'{self.emotion}, {self.detection_time},{self.etudiant.nom}'
     
     

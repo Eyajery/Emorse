@@ -18,17 +18,17 @@ from datetime import datetime
 from .forms import DetectionForm
 import asyncio
 import pyvirtualcam
+from itertools import groupby
 #from agora import AgoraRTCClient
 # Se connecter à la base de données MySQL
-mydb = mysql.connector.connect(
-  host="localhost",
-  user="root",
-  password="",
-  database="detection_emotion_db",
-)
+#mydb = mysql.connector.connect(
+ # host="localhost",
+  #user="root",
+  #password="",
+  #database="detection_emotion_db",)
 # Créer la table pour stocker les données de détection d'émotion
-mycursor = mydb.cursor()
-mycursor.execute("CREATE TABLE IF NOT EXISTS detections (id INT AUTO_INCREMENT PRIMARY KEY, emotion VARCHAR(255), detection_time DATETIME)")
+#mycursor = mydb.cursor()
+#mycursor.execute("CREATE TABLE IF NOT EXISTS detections (id INT AUTO_INCREMENT PRIMARY KEY, emotion VARCHAR(255), detection_time DATETIME)")
 
 # Create your views here.
 def first(request):
@@ -44,22 +44,49 @@ def lobby(request):
     return render(request, 'Teacher/base/lobby.html')
 
 def room_t(request):
-    return render(request, 'Teacher/base/room.html')
+      detections = Detection.objects.all()
+      data = [{'emotion': d.emotion, 'detection_time': d.detection_time} for d in detections]
+      context = {'data': data}
+    
+      return render(request, 'Teacher/base/room.html',context)
 def room_s(request):
     return render(request, 'Student/base/room.html')
+def recommendation_s(request):
+    latest_detection = Detection.objects.latest('detection_time')
+    detections = Detection.objects.filter(etudiant=latest_detection.etudiant).order_by('-detection_time')
+    data = [{'emotion': d.emotion, 'detection_time': d.detection_time, 'etudiant': d.etudiant.nom} for d in detections]
+    latest_etudiant = latest_detection.etudiant.nom if detections.exists() else None
+    context = {'data': data, 'latest_etudiant': latest_etudiant}
+    return render(request, 'Student/recommendation/recommendation.html',context)
+def recommendation_spositive(request):
+    latest_detection = Detection.objects.latest('detection_time')
+    detections = Detection.objects.filter(etudiant=latest_detection.etudiant).order_by('-detection_time')
+    data = [{'emotion': d.emotion, 'detection_time': d.detection_time, 'etudiant': d.etudiant.nom} for d in detections]
+    latest_etudiant = latest_detection.etudiant.nom if detections.exists() else None
+    context = {'data': data, 'latest_etudiant': latest_etudiant}
+    return render(request, 'Student/recommendation/positive_recommendation.html',context)
+def recommendation_t(request):
 
+    return render(request, 'Teacher/recommendation/recommendation.html')
+def recommendation_tpositive(request):
+
+    return render(request, 'Teacher/recommendation/positive_recommendation.html')
 #Dashboarding: Teacher
 def dashboard_t(request):
     detections = Detection.objects.all()
-    data = [{'emotion': d.emotion, 'detection_time': d.detection_time} for d in detections]
-    context = {'data': data}
+    data = [{'emotion': d.emotion, 'detection_time': d.detection_time,'etudiant':d.etudiant.nom} for d in detections]
+   
+    etudiants = detections.order_by().values_list('etudiant__nom', flat=True).distinct()
+    context = {'data': data,'etudiants': etudiants}
     return render(request, 'Teacher/dashboard/dashboard.html', context)
 
 #Dashboarding: Student
 def dashboard_s(request):
-    detections = Detection.objects.all()
-    data = [{'emotion': d.emotion, 'detection_time': d.detection_time} for d in detections]
-    context = {'data': data}
+    latest_detection = Detection.objects.latest('detection_time')
+    detections = Detection.objects.filter(etudiant=latest_detection.etudiant).order_by('-detection_time')
+    data = [{'emotion': d.emotion, 'detection_time': d.detection_time, 'etudiant': d.etudiant.nom} for d in detections]
+    latest_etudiant = latest_detection.etudiant.nom if detections.exists() else None
+    context = {'data': data, 'latest_etudiant': latest_etudiant}
     return render(request, 'Student/dashboard/dashboard.html', context)
 
 async def getToken(request):
@@ -129,62 +156,38 @@ emotion_labels = ['Angry','Disgust','Fear','Happy','Neutral', 'Sad', 'Surprise']
 face_classifier = cv2.CascadeClassifier(r'C:\Users\aya\Desktop\Emotion_Detection\haarcascade_frontalface_default.xml')
 width=640
 height=480
-
-# Function to generate frames from the video stream
 def emotion_detection(request):
-   #member_data = Etudiant.objects.last()
-   with pyvirtualcam.Camera(width, height, 20) as cam:
-
-     cap = cv2.VideoCapture(0)
-     while detection:
-        success, frame = cap.read()
-        if not success:
-            break
-        else:
-            labels = []
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = face_classifier.detectMultiScale(gray)
-            for (x, y, w, h) in faces:
-
-                roi_gray = gray[y:y + h, x:x + w]
-                roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
-                if np.sum([roi_gray]) != 0:
-                    roi = roi_gray.astype('float') / 255.0
-                    roi = np.array(roi)
-                    roi = np.expand_dims(roi, axis=0)
-                    prediction = classifier.predict(roi)[0]
-                    label = emotion_labels[prediction.argmax()]
-                    label_position = (x, y)
-                    
-                   # Adjust the color of the frame
-                   #frame = adjust_color(frame, brightness, contrast, saturation)
-
-                    member = RoomMember.objects.last()
-                    if member is not None:
-                            # Create or update the corresponding Etudiant object
-                            etudiant, created = Etudiant.objects.get_or_create(nom=member.name)
-                            etudiant.etat='present(e)'
+    with pyvirtualcam.Camera(width, height, 20) as cam:
+        cap = cv2.VideoCapture(0)
+        gray = None
+        member_list = list(RoomMember.objects.exclude(name='Mr Ali').values_list('name', flat=True))
+        while detection:
+            success, frame = cap.read()
+            if not success:
+                break
+            else:
+                labels = []
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_classifier.detectMultiScale(gray)
+                for (x, y, w, h) in faces:
+                    roi_gray = gray[y:y + h, x:x + w]
+                    roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
+                    if np.sum([roi_gray]) != 0:
+                        roi = roi_gray.astype('float') / 255.0
+                        roi = np.array(roi)
+                        roi = np.expand_dims(roi, axis=0)
+                        prediction = classifier.predict(roi)[0]
+                        label = emotion_labels[prediction.argmax()]
+                        label_position = (x, y)
+                        for member_name in member_list:
+                            etudiant, created = Etudiant.objects.get_or_create(nom=member_name)
+                            etudiant.etat = 'present(e)'
                             etudiant.save()
-
-                            # Save the emotion detection data for the student
                             detection_data = Detection.objects.create(etudiant=etudiant, emotion=label, detection_time=timezone.now())
                             detection_data.save()
-                    # Sauvegarder les données de détection d'émotion dans la base de données
-                    sql = "INSERT INTO detections (emotion, detection_time) VALUES (%s, %s)"
-                    val = (label, datetime.now())
-                    mycursor.execute(sql, val)
-                    mydb.commit()
-                else:
-                    cv2.putText(frame, 'No Faces', (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-       
-       
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  
-        cam.send(frame)
-
-   
-   return render(request, 'Student/base/room.html')
-
-
-
-
-            
+                            member_list = list(RoomMember.objects.exclude(name='Mr Ali').values_list('name', flat=True))
+                    else:
+                        cv2.putText(frame, 'No Faces', (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  
+            cam.send(frame)
+    return render(request, 'Student/base/room.html')

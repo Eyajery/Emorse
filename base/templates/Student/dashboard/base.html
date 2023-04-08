@@ -13,10 +13,81 @@
     <!--Chartjs CDN-->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
 
-    <title>{% block title %}{% endblock %}</title>
+    <title>Emorse</title>
+    <style>
+
+
+#myMessage {
+  margin-top: 30px;
+  text-align: center;
+}
+
+#myMessage button {
+  cursor: pointer;
+}
+
+
+h1 {
+  font-size: 32px;
+  text-align: center;
+}
+
+.y-axis-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: absolute;
+  left: -45px;
+  top: 0;
+  bottom: 0;
+  color: #333;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.y-axis-labels span {
+  display: block;
+  transform: rotate(-90deg);
+  transform-origin: left top;
+  white-space: nowrap;
+}
+
+:root {
+  --primary-color: #007bff;
+  --secondary-color: #6c757d;
+  --success-color: #28a745;
+  --info-color: #17a2b8;
+  --warning-color: #ffc107;
+  --danger-color: #dc3545;
+}
+
+
+
+
+button {
+  background-color: var(--primary-color);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 10px 20px;
+}
+
+button:hover {
+  background-color: #0056b3;
+  cursor: pointer;
+}
+
+canvas {
+  border: 1px solid var(--primary-color);
+  border-radius: 5px;
+  max-width: 100%;
+}
+
+
+    </style>
 </head>
 
-<body>
+<body <body style="background-color:#e9eaeb"; >
 
 
     <div class="container">
